@@ -312,7 +312,7 @@ public class SafeRedirectRouter {
             + "      <a href=\"" + escapeHtml(targetUrl) + "\" rel=\"noopener noreferrer nofollow\" id=\"confirm-btn\" class=\"sr-btn sr-btn-primary\">"
             + "        确认跳转"
             + "      </a>"
-            + "      <a href=\"javascript:history.back()\" class=\"sr-btn sr-btn-secondary\">"
+            + "      <a href=\"javascript:history.back()\" id=\"back-btn\" class=\"sr-btn sr-btn-secondary\">"
             + "        返回上页"
             + "      </a>"
             + "    </div>"
@@ -331,7 +331,16 @@ public class SafeRedirectRouter {
             + "<title>错误 - " + escapeHtml(title) + "</title></head><body>"
             + "<h2>⚠️ " + escapeHtml(title) + "</h2>"
             + "<p>" + escapeHtml(message) + "</p>"
-            + "<a href=\"javascript:history.back()\">返回上页</a>"
+            + "<a href=\"javascript:history.back()\" id=\"back-btn\">返回上页</a>"
+            + "<script>"
+            + "var b=document.getElementById('back-btn');"
+            + "if(b){b.addEventListener('click',function(e){e.preventDefault();"
+            + "var f=(document.referrer&&document.referrer!==window.location.href)"
+            + "?document.referrer:'/';"
+            + "if(window.history.length>1){window.history.back();}else{"
+            + "window.close();"
+            + "setTimeout(function(){window.location.replace(f);},300);}});}"
+            + "</script>"
             + "</body></html>";
     }
 
@@ -461,6 +470,38 @@ public class SafeRedirectRouter {
                     if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
                     e.preventDefault();
                     jump();
+                  });
+                }
+
+                // 点击"返回上页"：优先回退浏览器历史；
+                // 若中间页在新标签页打开（历史栈只有本页，history.back() 无效），
+                // 则直接关闭当前标签页，浏览器会自动回到来源标签页；
+                // 关闭被浏览器安全策略拒绝时，降级跳转到来源页（无来源则回首页）
+                function goBack() {
+                  var fallback = (document.referrer && document.referrer !== window.location.href)
+                    ? document.referrer : '/';
+                  if (window.history.length > 1) {
+                    var left = false;
+                    // pagehide 触发说明后退导航已生效；否则 500ms 后走兜底返回
+                    window.addEventListener('pagehide', function() { left = true; }, { once: true });
+                    window.history.back();
+                    setTimeout(function() {
+                      if (!left) window.location.replace(fallback);
+                    }, 500);
+                  } else {
+                    // 作为新标签页首个页面被打开时，window.close() 可被浏览器允许执行
+                    window.close();
+                    // 若关闭请求被拒绝，本页面仍存活，定时器会执行并降级跳回来源页
+                    setTimeout(function() {
+                      window.location.replace(fallback);
+                    }, 300);
+                  }
+                }
+                var backBtn = document.getElementById('back-btn');
+                if (backBtn) {
+                  backBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    goBack();
                   });
                 }
 
